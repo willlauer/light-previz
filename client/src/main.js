@@ -8,6 +8,7 @@ import { createOutliner } from './outliner.js';
 import { serializeScene, applyScene, downloadJson, pickJsonFile, showSaveDialog,
          supportsFsAccess, pickSaveFileHandle, pickOpenFileHandle, writeJsonToHandle } from './scene_io.js';
 import { pickFixture } from './fixture_picker.js';
+import { pickGroupParams } from './fixture_group.js';
 import { pickModel, pickScene, loadModel } from './model_loader.js';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -62,13 +63,13 @@ function bindRange(id, valueId, fmt, onChange) {
     if (v) v.textContent = fmt(n);
     onChange(n);
   };
-  el.addEventListener('input', apply);
+  el.addEventListener('input', () => { apply(); markDirty(); });
   apply();
 }
 function bindColor(id, onChange) {
   const el = document.getElementById(id);
   const apply = () => onChange(el.value);
-  el.addEventListener('input', apply);
+  el.addEventListener('input', () => { apply(); markDirty(); });
   apply();
 }
 bindRange('amb-int', 'amb-int-v', (n) => n.toFixed(2), (n) => { stageLights.ambient.intensity = n; });
@@ -86,6 +87,30 @@ const wsStatus = document.getElementById('ws-status');
 const universeList = document.getElementById('universe-list');
 const fixtureCountEl = document.getElementById('fixture-count');
 const fpsEl = document.getElementById('fps');
+
+// ───────────────────────────────────────────────────────────────────────────
+// Unsaved-changes tracking
+// ───────────────────────────────────────────────────────────────────────────
+// `dirty` is true whenever the scene has been edited since the last
+// save / open / new. Anything serializeScene() captures — fixtures, extra
+// models, scene choice, lighting — flips it via markDirty(); Save / Open /
+// New / initial load clear it via markClean(). Camera movement is excluded
+// on purpose (orbiting would otherwise leave the scene permanently dirty).
+const dirtyIndicator = document.getElementById('dirty-indicator');
+let dirty = false;
+function setDirty(value) {
+  dirty = value;
+  dirtyIndicator.classList.toggle('show', dirty);
+}
+function markDirty() { if (!dirty) setDirty(true); }
+function markClean() { if (dirty) setDirty(false); }
+
+// Warn before leaving (reload / close tab) with unsaved edits.
+window.addEventListener('beforeunload', (e) => {
+  if (!dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 
 // ───────────────────────────────────────────────────────────────────────────
 // Load patch + profiles, build fixtures
@@ -130,6 +155,7 @@ function addFixture(def) {
   fixtureCountEl.textContent = String(fixtures.length);
   outliner?.refresh();
   sendPatchToServer();
+  markDirty();
   // If this fixture's xz matches a truss slot, hide that slot's marker
   if (def.mount === 'truss' && stageLights.trussSlots) {
     const slot = stageLights.trussSlots.find((s) =>
@@ -170,6 +196,7 @@ function removeFixture(fixture) {
   }
   outliner?.refresh();
   sendPatchToServer();
+  markDirty();
 }
 
 // Find the first free DMX address range in `universe` that can hold
@@ -202,6 +229,7 @@ function setFixturePatch(fixture, universe, startAddress) {
   fixture.patch.universe = universe;
   fixture.patch.startAddress = startAddress;
   sendPatchToServer();
+  markDirty();
 }
 
 // Generate a fixture ID unique within the current fixtures array.
@@ -347,6 +375,59 @@ async function doAddTruss() {
   return handleSlotClick(slot);
 }
 
+// Place a row of N identical fixtures with auto-chained DMX addresses.
+// Pick a profile, collect group params (count, universe, base address,
+// spacing, axis), then click to set the row's center. Each fixture i is
+// patched at base + i*channelCount so the whole row occupies one contiguous
+// DMX block; the dialog refuses any block that runs past channel 512.
+async function doAddGroup() {
+  const profile = await pickFixture({ title: 'Add Fixture Group' });
+  if (!profile) return;
+  profileCache.set(profile.name, profile);
+
+  const free = nextFreeAddress(profile.channelCount, 0);
+  const params = await pickGroupParams(profile, { defaultBase: free > 0 ? free : 1 });
+  if (!params) return;
+
+  const { count, universe, base, spacing, axis } = params;
+  const ch = profile.channelCount;
+  const last = base + count * ch - 1;
+  if (last > 512) {
+    alert(`Group needs ${count * ch} channels (U${universe}:${base}→${last}) ` +
+          `but a DMX universe only has 512.`);
+    return;
+  }
+  if (!dragging) return;
+
+  dragging.startPlacement({
+    targets: getPlacementTargets(),
+    onPlace: (worldPoint) => {
+      // Lay the row out centered on the click point, along the chosen axis.
+      for (let i = 0; i < count; i++) {
+        const offset = (i - (count - 1) / 2) * spacing;
+        const px = worldPoint.x + (axis === 'x' ? offset : 0);
+        const pz = worldPoint.z + (axis === 'z' ? offset : 0);
+        const py = snapPlacementY({ x: px, y: worldPoint.y, z: pz });
+
+        // defaultDefForFloor gives a unique id + sensible aim/orientation;
+        // override patch + position for this member of the group.
+        const def = defaultDefForFloor(profile);
+        def.universe = universe;
+        def.startAddress = base + i * ch;
+        def.position = [px, py, pz];
+
+        const fixture = addFixture(def);
+        if (!fixture) continue;
+        fixture.group.position.set(px, py, pz);
+        const resolved = dragging.resolvePlacementXZ(fixture, px, pz);
+        fixture.group.position.x = resolved.x;
+        fixture.group.position.z = resolved.z;
+      }
+    },
+    onCancel: () => { /* nothing extra to clean up */ },
+  });
+}
+
 // ─── Scene and extra-model state ──────────────────────────────────────────
 //
 // The "scene" is exactly one of:
@@ -403,6 +484,7 @@ async function doPickScene() {
   const choice = await pickScene();
   if (!choice) return;
   await setScene(choice);
+  markDirty();
 }
 
 // Extra models — independent of the scene, additive.
@@ -422,6 +504,7 @@ async function doAddModel() {
   group.position.set(0, 0, 0);
   scene.add(group);
   extraModels.push({ id: choice.id, group });
+  markDirty();
 }
 
 // Remove a single extra model (e.g. via Delete while it's selected).
@@ -435,6 +518,7 @@ function removeExtraModel(model) {
     else obj.material?.dispose?.();
   });
   if (selectedModel === model) handleSelectModel(null);
+  markDirty();
 }
 
 // Selection highlight — a glowing ring on the floor that sits directly under
@@ -546,6 +630,7 @@ loadPatchAndBuild()
       onSelect:  handleSelect,
       onSlotClick: handleSlotClick,
       onSelectModel: handleSelectModel,
+      onChange:  markDirty,
     });
 
     // Outliner panel — same handleSelect ensures sidebar clicks update the
@@ -553,13 +638,16 @@ loadPatchAndBuild()
     outliner = createOutliner({
       fixtures,
       onSelect: handleSelect,
-      onOrient: (f, orientation) => setBarOrientation(f, orientation),
-      onYaw: (f, yawRad) => setFixtureYaw(f, yawRad),
+      onOrient: (f, orientation) => { setBarOrientation(f, orientation); markDirty(); },
+      onYaw: (f, yawRad) => { setFixtureYaw(f, yawRad); markDirty(); },
       onPatch: (f, universe, startAddress) => setFixturePatch(f, universe, startAddress),
     });
 
     // Snapshot the just-built scene for use by "New Scene" / Reset.
     initialState = serializeScene(sceneCtx());
+    // Building from patch.json marked the scene dirty; the freshly-loaded
+    // state is the clean baseline.
+    markClean();
   })
   .catch((err) => {
     console.error('patch/profile load failed', err);
@@ -594,6 +682,7 @@ renderer.domElement.addEventListener('wheel', (e) => {
   const dir = e.deltaY > 0 ? 1 : -1;
   const newYaw = (selected.yaw || 0) + dir * YAW_WHEEL_STEP_RAD;
   setFixtureYaw(selected, newYaw);
+  markDirty();
   outliner?.refresh();
 }, { passive: false, capture: true });
 
@@ -680,6 +769,7 @@ async function doNew() {
   if (fixtures.length > 0 && !confirm('New scene: clear all fixtures?')) return;
   currentFileHandle = null;   // a fresh scene is no longer tied to a saved file
   await applyScene(initialState || { version: 2, fixtures: [] }, sceneCtx());
+  markClean();
 }
 
 // Handle to the file the scene is currently bound to (set by Save or Open).
@@ -699,6 +789,7 @@ async function doSave() {
       }
       await writeJsonToHandle(currentFileHandle, data);
       lastSaveName = (currentFileHandle.name || lastSaveName).replace(/\.json$/i, '');
+      markClean();
     } catch (err) {
       console.error('save failed', err);
       alert('Could not save scene file:\n' + err.message);
@@ -710,6 +801,7 @@ async function doSave() {
   if (!name) return;
   lastSaveName = name.replace(/\.json$/i, '');
   downloadJson(data, name);
+  markClean();
 }
 
 async function doOpen() {
@@ -720,12 +812,14 @@ async function doOpen() {
       await applyScene(res.data, sceneCtx());
       currentFileHandle = res.handle;   // bind Save to the file we just opened
       lastSaveName = (res.handle.name || lastSaveName).replace(/\.json$/i, '');
+      markClean();
       return;
     }
     const input = document.getElementById('open-file-input');
     const data = await pickJsonFile(input);
     if (!data) return;
     await applyScene(data, sceneCtx());
+    markClean();
   } catch (err) {
     console.error('load failed', err);
     alert('Could not load scene file:\n' + err.message);
@@ -761,6 +855,7 @@ for (const btn of addMenu.querySelectorAll('.dropdown button[data-action]')) {
     const action = btn.dataset.action;
     if (action === 'add-floor') doAddFloor();
     else if (action === 'add-truss') doAddTruss();
+    else if (action === 'add-group') doAddGroup();
     else if (action === 'add-model') doAddModel();
   });
 }

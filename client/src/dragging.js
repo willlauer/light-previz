@@ -157,7 +157,7 @@ function resolveCollisions(active, fixtures, obstacles, x, z) {
 // for the gesture to count as a drag rather than a click.
 const CLICK_THRESHOLD_PX = 5;
 
-export function setupDragging({ renderer, camera, controls, fixtures, obstacles = [], slots = [], models = [], onSelect, onSlotClick, onSelectModel }) {
+export function setupDragging({ renderer, camera, controls, fixtures, obstacles = [], slots = [], models = [], onSelect, onSlotClick, onSelectModel, onChange }) {
   const dom = renderer.domElement;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -383,6 +383,8 @@ export function setupDragging({ renderer, camera, controls, fixtures, obstacles 
     if (dragStarted) {
       controls.enabled = true;
       try { dom.releasePointerCapture(e.pointerId); } catch {}
+      // A drag actually moved a fixture or model — the scene is now dirty.
+      onChange?.();
     } else if (wasClick) {
       // Empty-space click → onSelect(null) (deselect). Fixture click →
       // onSelect(fixture). Slot click → onSlotClick(slot).
