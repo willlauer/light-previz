@@ -1,0 +1,14 @@
+{
+  "name": "oppskbar_3ch",
+  "displayName": "Oppsk Bar — Washer Wall Light (3CH)",
+  "type": "bar",
+  "channelCount": 3,
+  "offsets": {
+    "red": 0,
+    "green": 1,
+    "blue": 2
+  },
+  "defaults": {
+    "dimmer": 255
+  }
+}

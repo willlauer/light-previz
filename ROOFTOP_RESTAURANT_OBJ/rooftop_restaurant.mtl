@@ -1,0 +1,100 @@
+# Rooftop restaurant materials
+newmtl deck_wood
+	Ns 18
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.10 0.10 0.10
+	map_Kd deck_wood.png
+	map_Ka deck_wood.png
+
+newmtl table_oak
+	Ns 24
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.12 0.12 0.12
+	map_Kd table_oak.png
+	map_Ka table_oak.png
+
+newmtl bar_walnut
+	Ns 30
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.18 0.18 0.18
+	map_Kd bar_walnut.png
+	map_Ka bar_walnut.png
+
+newmtl wall_stucco
+	Ns 8
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.04 0.04 0.04
+	map_Kd wall_stucco.png
+	map_Ka wall_stucco.png
+
+newmtl concrete
+	Ns 8
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.05 0.05 0.05
+	map_Kd concrete.png
+	map_Ka concrete.png
+
+newmtl metal
+	Ns 120
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.55 0.55 0.55
+	map_Kd metal_dark.png
+	map_Ka metal_dark.png
+
+newmtl glass
+	Ns 200
+	d 0.42
+	Tr 0.58
+	illum 4
+	Ka 0.6 0.7 0.75
+	Kd 0.6 0.7 0.75
+	Ks 0.9 0.9 0.9
+	map_Kd glass.png
+
+newmtl canopy
+	Ns 6
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.03 0.03 0.03
+	map_Kd canopy.png
+	map_Ka canopy.png
+
+newmtl terracotta
+	Ns 10
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.06 0.06 0.06
+	map_Kd terracotta.png
+	map_Ka terracotta.png
+
+newmtl foliage
+	Ns 6
+	d 1
+	illum 2
+	Ka 1 1 1
+	Kd 1 1 1
+	Ks 0.05 0.05 0.05
+	map_Kd foliage.png
+	map_Ka foliage.png

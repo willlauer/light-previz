@@ -1,0 +1,19 @@
+{
+  "name": "rockwedge_6ch",
+  "displayName": "Rockville RockWedge LED (6CH)",
+  "type": "wedge",
+  "channelCount": 6,
+  "colorModel": "RGBWAUV",
+  "offsets": {
+    "red": 0,
+    "green": 1,
+    "blue": 2,
+    "white": 3,
+    "amber": 4,
+    "uv": 5
+  },
+  "defaults": {
+    "dimmer": 255
+  },
+  "beamAngle": 30
+}

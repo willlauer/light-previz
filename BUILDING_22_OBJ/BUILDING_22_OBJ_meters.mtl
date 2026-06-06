@@ -1,0 +1,212 @@
+# Rebuilt MTL with image textures
+
+newmtl ac
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka ac_001.jpg
+	map_Kd ac_001.jpg
+
+newmtl board
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 0.700000 0.700000 0.700000
+	Ks 0.200000 0.200000 0.200000
+
+newmtl bricks_01
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka briks_001.jpg
+	map_Kd briks_001.jpg
+
+newmtl bricks_04
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka briks_004.jpg
+	map_Kd briks_004.jpg
+
+newmtl door
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka door_001.jpg
+	map_Kd door_001.jpg
+
+newmtl glass
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 0.700000 0.700000 0.700000
+	Ks 0.200000 0.200000 0.200000
+
+newmtl metal_004
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka metal_004.jpg
+	map_Kd metal_004.jpg
+
+newmtl metal_01
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka metal_001.jpg
+	map_Kd metal_001.jpg
+
+newmtl metal_02
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka metal_002.jpg
+	map_Kd metal_002.jpg
+
+newmtl metal_03
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka metal_003.jpg
+	map_Kd metal_003.jpg
+
+newmtl metal_05
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka metal_005.jpg
+	map_Kd metal_005.jpg
+
+newmtl metal_08
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka metal_008.jpg
+	map_Kd metal_008.jpg
+
+newmtl misc
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 0.700000 0.700000 0.700000
+	Ks 0.200000 0.200000 0.200000
+
+newmtl plaster_01
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka plaster_001.jpg
+	map_Kd plaster_001.jpg
+
+newmtl plaster_05
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka plaster_005.jpg
+	map_Kd plaster_005.jpg
+
+newmtl plaster_11
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka plaster_011.jpg
+	map_Kd plaster_011.jpg
+
+newmtl roof
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka roof_001.jpg
+	map_Kd roof_001.jpg
+
+newmtl roof_tinware
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 1.000000 1.000000 1.000000
+	Kd 1.000000 1.000000 1.000000
+	Ks 0.200000 0.200000 0.200000
+	map_Ka roof_tinware_002.jpg
+	map_Kd roof_tinware_002.jpg
+

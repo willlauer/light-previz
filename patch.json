@@ -1,0 +1,4 @@
+{
+  "note": "Fixtures are added at runtime via the Add menu or by clicking a truss slot. This file just provides the starting layout — by default it's empty. Save/load scene files via File > Save / Open to persist a layout.",
+  "fixtures": []
+}

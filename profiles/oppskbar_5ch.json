@@ -1,0 +1,16 @@
+{
+  "name": "oppskbar_5ch",
+  "displayName": "Oppsk Bar — Washer Wall Light (5CH)",
+  "type": "bar",
+  "channelCount": 5,
+  "offsets": {
+    "dimmer": 0,
+    "strobe": 1,
+    "red": 2,
+    "green": 3,
+    "blue": 4
+  },
+  "strobe": {
+    "threshold": 10
+  }
+}

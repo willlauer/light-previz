@@ -1,0 +1,19 @@
+{
+  "name": "oppskbar_8ch",
+  "displayName": "Oppsk Bar — Washer Wall Light (8CH)",
+  "type": "bar",
+  "channelCount": 8,
+  "offsets": {
+    "dimmer": 0,
+    "red": 1,
+    "green": 2,
+    "blue": 3,
+    "colorMacro": 4,
+    "patternEffect": 5,
+    "staticColor": 6,
+    "strobe": 7
+  },
+  "strobe": {
+    "threshold": 10
+  }
+}

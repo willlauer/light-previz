@@ -1,0 +1,19 @@
+{
+  "name": "lightviz",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "server": "node server/index.js",
+    "client": "vite client",
+    "dev": "concurrently -n server,client -c green,cyan \"npm run server\" \"npm run client\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "vite": "^5.4.10"
+  },
+  "dependencies": {
+    "three": "^0.170.0",
+    "ws": "^8.18.0"
+  }
+}

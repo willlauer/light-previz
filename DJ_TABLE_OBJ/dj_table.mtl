@@ -1,0 +1,81 @@
+# DJ table materials
+
+newmtl table_top
+	Ns 24
+	d 1
+	illum 2
+	Ka 0.180 0.120 0.080
+	Kd 0.180 0.120 0.080
+	Ks 0.100 0.100 0.100
+
+newmtl table_leg
+	Ns 40
+	d 1
+	illum 2
+	Ka 0.100 0.100 0.110
+	Kd 0.100 0.100 0.110
+	Ks 0.200 0.200 0.200
+
+newmtl ctrl_body
+	Ns 30
+	d 1
+	illum 2
+	Ka 0.060 0.060 0.070
+	Kd 0.060 0.060 0.070
+	Ks 0.150 0.150 0.150
+
+newmtl jog_metal
+	Ns 120
+	d 1
+	illum 2
+	Ka 0.550 0.560 0.580
+	Kd 0.550 0.560 0.580
+	Ks 0.550 0.550 0.550
+
+newmtl knob_dark
+	Ns 50
+	d 1
+	illum 2
+	Ka 0.120 0.120 0.130
+	Kd 0.120 0.120 0.130
+	Ks 0.250 0.250 0.250
+
+newmtl fader
+	Ns 90
+	d 1
+	illum 2
+	Ka 0.750 0.750 0.780
+	Kd 0.750 0.750 0.780
+	Ks 0.400 0.400 0.400
+
+newmtl pad_red
+	Ns 60
+	d 1
+	illum 2
+	Ka 0.900 0.120 0.120
+	Kd 0.900 0.120 0.120
+	Ks 0.300 0.300 0.300
+
+newmtl pad_green
+	Ns 60
+	d 1
+	illum 2
+	Ka 0.120 0.800 0.200
+	Kd 0.120 0.800 0.200
+	Ks 0.300 0.300 0.300
+
+newmtl pad_blue
+	Ns 60
+	d 1
+	illum 2
+	Ka 0.120 0.350 0.950
+	Kd 0.120 0.350 0.950
+	Ks 0.300 0.300 0.300
+
+newmtl pad_yellow
+	Ns 60
+	d 1
+	illum 2
+	Ka 0.950 0.800 0.100
+	Kd 0.950 0.800 0.100
+	Ks 0.300 0.300 0.300

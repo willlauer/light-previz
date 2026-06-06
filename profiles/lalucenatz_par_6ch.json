@@ -1,0 +1,24 @@
+{
+  "name": "lalucenatz_par_6ch",
+  "displayName": "LaluceNatz 36-LED RGB Par (6CH)",
+  "type": "par",
+  "channelCount": 6,
+  "offsets": {
+    "dimmer": 0,
+    "red": 1,
+    "green": 2,
+    "blue": 3,
+    "strobe": 4,
+    "function": 5
+  },
+  "strobe": {
+    "threshold": 10
+  },
+  "beamAngle": 25,
+  "ledCount": 36,
+  "ledRings": [
+    { "count": 6,  "radius": 0.045 },
+    { "count": 12, "radius": 0.085 },
+    { "count": 18, "radius": 0.13 }
+  ]
+}

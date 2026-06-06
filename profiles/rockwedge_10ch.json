@@ -1,0 +1,23 @@
+{
+  "name": "rockwedge_10ch",
+  "displayName": "Rockville RockWedge LED (10CH)",
+  "type": "wedge",
+  "channelCount": 10,
+  "colorModel": "RGBWAUV",
+  "offsets": {
+    "dimmer": 0,
+    "red": 1,
+    "green": 2,
+    "blue": 3,
+    "white": 4,
+    "amber": 5,
+    "uv": 6,
+    "strobe": 7,
+    "function": 8,
+    "colorSpeed": 9
+  },
+  "strobe": {
+    "threshold": 1
+  },
+  "beamAngle": 30
+}

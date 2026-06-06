@@ -1,0 +1,23 @@
+{
+  "name": "oppskbar_24ch",
+  "displayName": "Oppsk Bar — Washer Wall Light (24CH, master RGB + 16 seg dimmers)",
+  "type": "bar",
+  "channelCount": 24,
+  "segments": 16,
+  "offsets": {
+    "dimmer": 0,
+    "red": 1,
+    "green": 2,
+    "blue": 3,
+    "colorMacro": 4,
+    "patternEffect": 5,
+    "staticColor": 6,
+    "strobe": 7
+  },
+  "segmentOffsets": {
+    "dimmer": [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+  },
+  "strobe": {
+    "threshold": 10
+  }
+}
