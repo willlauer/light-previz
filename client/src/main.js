@@ -193,6 +193,17 @@ function nextFreeAddress(channelCount, universe = 0) {
   return -1;
 }
 
+// Update a fixture's DMX patch (universe + start address). The patch is
+// the source of truth for `resolveDmx` each frame, so changing it just
+// makes the fixture start reading from the new channels on the next tick.
+// Also pushes the updated patch to the server so its synth (or in real
+// Soundswitch use, just its bookkeeping) reflects the new layout.
+function setFixturePatch(fixture, universe, startAddress) {
+  fixture.patch.universe = universe;
+  fixture.patch.startAddress = startAddress;
+  sendPatchToServer();
+}
+
 // Generate a fixture ID unique within the current fixtures array.
 // Form: "<profile-prefix>_<n>", e.g. rockwedge_1, oppskbar_2.
 function genFixtureId(profileName) {
@@ -544,6 +555,7 @@ loadPatchAndBuild()
       onSelect: handleSelect,
       onOrient: (f, orientation) => setBarOrientation(f, orientation),
       onYaw: (f, yawRad) => setFixtureYaw(f, yawRad),
+      onPatch: (f, universe, startAddress) => setFixturePatch(f, universe, startAddress),
     });
 
     // Snapshot the just-built scene for use by "New Scene" / Reset.

@@ -8,7 +8,7 @@ const TYPE_LABELS = {
   unknown: 'Other',
 };
 
-export function createOutliner({ fixtures, onSelect, onOrient, onYaw }) {
+export function createOutliner({ fixtures, onSelect, onOrient, onYaw, onPatch }) {
   const rootEl = document.getElementById('outliner');
   const tab = document.getElementById('outliner-tab');
   const closeBtn = document.getElementById('outliner-close');
@@ -65,9 +65,8 @@ export function createOutliner({ fixtures, onSelect, onOrient, onYaw }) {
           orientBtn = `<button class="orient-btn" data-orient="${cur}" title="Click to toggle orientation">${cur}</button>`;
         }
 
-        // When selected, expand to show a yaw slider for any floor fixture.
-        // Yaw on a par spins it around vertical (re-aims an uplight). Yaw on
-        // a bar rotates its footprint, which affects drag collision.
+        // When selected, expand the row to show patch (universe + start
+        // address) inputs, plus a yaw slider for floor fixtures.
         let yawRow = '';
         if (f.patch.fixtureId === selectedId && f.mount === 'floor') {
           const deg = Math.round(((f.yaw || 0) * 180 / Math.PI));
@@ -80,12 +79,32 @@ export function createOutliner({ fixtures, onSelect, onOrient, onYaw }) {
           `;
         }
 
+        let patchRow = '';
+        if (f.patch.fixtureId === selectedId) {
+          const u = f.patch.universe ?? 0;
+          const a = f.patch.startAddress ?? 1;
+          const ch = f.profile.channelCount;
+          patchRow = `
+            <div class="patch-row">
+              <label>patch</label>
+              <span class="patch-fields">
+                <span class="prefix">U</span>
+                <input type="number" class="patch-universe" min="0" max="32767" step="1" value="${u}">
+                <span class="prefix">:</span>
+                <input type="number" class="patch-address" min="1" max="${512 - ch + 1}" step="1" value="${a}">
+                <span class="suffix">→${a + ch - 1} (${ch}ch)</span>
+              </span>
+            </div>
+          `;
+        }
+
         item.innerHTML = `
           <div class="id-row">
             <span class="id">${f.patch.fixtureId}</span>
             ${orientBtn}${mountTag}
           </div>
           <div class="meta">${f.profile.name} · U${f.patch.universe}:${f.patch.startAddress}</div>
+          ${patchRow}
           ${yawRow}
         `;
 
@@ -104,6 +123,7 @@ export function createOutliner({ fixtures, onSelect, onOrient, onYaw }) {
             return;
           }
           if (e.target.closest('.yaw-row')) return;
+          if (e.target.closest('.patch-row')) return;
           onSelect?.(f);
         });
 
@@ -116,6 +136,29 @@ export function createOutliner({ fixtures, onSelect, onOrient, onYaw }) {
             valEl.textContent = deg + '°';
             onYaw?.(f, deg * Math.PI / 180);
           });
+        }
+
+        // Wire patch inputs. Commit on change (blur / Enter), not input —
+        // this avoids re-pushing the patch to the server on every keystroke.
+        const uniInput = item.querySelector('.patch-universe');
+        const addrInput = item.querySelector('.patch-address');
+        if (uniInput && addrInput) {
+          const commit = () => {
+            const u = Math.max(0, Math.min(32767, Math.floor(Number(uniInput.value) || 0)));
+            const ch = f.profile.channelCount;
+            const a = Math.max(1, Math.min(512 - ch + 1, Math.floor(Number(addrInput.value) || 1)));
+            uniInput.value = u;
+            addrInput.value = a;
+            if (u !== f.patch.universe || a !== f.patch.startAddress) {
+              onPatch?.(f, u, a);
+              render();
+            }
+          };
+          const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } };
+          uniInput.addEventListener('change', commit);
+          addrInput.addEventListener('change', commit);
+          uniInput.addEventListener('keydown', onKey);
+          addrInput.addEventListener('keydown', onKey);
         }
         items.appendChild(item);
       }

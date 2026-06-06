@@ -37,6 +37,11 @@ sock.on('error', (err) => {
   console.error('[artnet] socket error', err);
 });
 
+// Packet rate counters — printed once a second so you can confirm the
+// stream is healthy without spamming on every packet.
+const packetCounts = {};        // universe -> packets/sec
+const packetSources = {};       // universe -> last seen source ip:port
+
 sock.on('message', (msg, rinfo) => {
   if (msg.length < 18) return;
   if (!msg.subarray(0, 8).equals(ARTNET_HEADER)) return;
@@ -56,13 +61,29 @@ sock.on('message', (msg, rinfo) => {
   const slots = Math.min(length, 512);
   for (let i = 0; i < slots; i++) buf[i] = msg[18 + i];
 
+  packetCounts[universe] = (packetCounts[universe] || 0) + 1;
+  packetSources[universe] = `${rinfo.address}:${rinfo.port}`;
+
   if (!seenUniverses.has(universe)) {
     seenUniverses.add(universe);
     console.log(
-      `[artnet] first packet on universe ${universe} (net=${(universe >> 8) & 0x7f} sub=${(universe >> 4) & 0xf} uni=${universe & 0xf}) from ${rinfo.address}:${rinfo.port}`
+      `[artnet] first packet on universe ${universe} (net=${(universe >> 8) & 0x7f} sub=${(universe >> 4) & 0xf} uni=${universe & 0xf}) from ${rinfo.address}:${rinfo.port}, ${slots} slots`
     );
   }
 });
+
+// Per-second packet-rate summary. Useful when verifying the stream is
+// actually arriving (a typical Soundswitch output is 30-44 packets/sec
+// per universe).
+setInterval(() => {
+  const lines = [];
+  for (const u of Object.keys(packetCounts)) {
+    if (packetCounts[u] === 0) continue;
+    lines.push(`u${u}: ${packetCounts[u]} pkt/s from ${packetSources[u]}`);
+  }
+  if (lines.length) console.log('[artnet]', lines.join(' · '));
+  for (const u of Object.keys(packetCounts)) packetCounts[u] = 0;
+}, 1000);
 
 sock.bind(ARTNET_PORT, '0.0.0.0', () => {
   console.log(`[artnet] listening on 0.0.0.0:${ARTNET_PORT} (UDP)`);
