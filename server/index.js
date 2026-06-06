@@ -1,6 +1,7 @@
 import dgram from 'node:dgram';
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -29,6 +30,8 @@ const seenUniverses = new Set();
 //   16..17 = Length of DMX data (big-endian, up to 512)
 //   18+    = DMX data
 const ARTNET_HEADER = Buffer.from('Art-Net\0');
+const OP_POLL = 0x2000;       // ArtPoll      — controller asks "who's out there?"
+const OP_POLLREPLY = 0x2100;  // ArtPollReply — node answers "here I am"
 const OP_DMX = 0x5000;
 
 const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
@@ -37,16 +40,83 @@ sock.on('error', (err) => {
   console.error('[artnet] socket error', err);
 });
 
+// ─── ArtPollReply (device discovery) ────────────────────────────────────────
+//
+// Controllers like Soundswitch don't blindly fire DMX at a port — they first
+// broadcast an ArtPoll and only list/output to nodes that answer with an
+// ArtPollReply. Without this the device list stays on "No device found" and
+// no DMX is ever sent. We advertise ourselves as a single-port DMX *output*
+// node on universe 0 (we still accept any universe in the DMX handler below).
+//
+// Packet layout per the Art-Net 4 spec (234 bytes). Anything we don't set
+// stays zero, which is valid.
+const POLLREPLY_LEN = 234;
+
+function localIPv4() {
+  // In WSL mirrored mode this is the Windows LAN IP; otherwise the eth0 IP.
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (a.family === 'IPv4' && !a.internal) return a.address;
+    }
+  }
+  return '0.0.0.0';
+}
+
+function buildPollReply() {
+  const buf = Buffer.alloc(POLLREPLY_LEN);
+  ARTNET_HEADER.copy(buf, 0);                 // 0..7   "Art-Net\0"
+  buf.writeUInt16LE(OP_POLLREPLY, 8);         // 8..9   OpCode (little-endian)
+
+  const ip = localIPv4().split('.').map(Number);
+  buf[10] = ip[0]; buf[11] = ip[1]; buf[12] = ip[2]; buf[13] = ip[3]; // 10..13 IP
+  buf.writeUInt16LE(ARTNET_PORT, 14);         // 14..15 Port (0x1936)
+
+  buf[16] = 0x00; buf[17] = 0x01;             // 16..17 firmware version
+  buf[18] = 0x00;                             // 18     NetSwitch (net 0)
+  buf[19] = 0x00;                             // 19     SubSwitch (subnet 0)
+  buf.writeUInt16BE(0x00ff, 20);              // 20..21 OEM (0x00ff = unknown)
+  buf[23] = 0xd0;                             // 23     Status1 (indicators normal)
+  buf.writeUInt16LE(0x7fff, 24);              // 24..25 ESTA man. code (prototype)
+
+  buf.write('lightviz', 26, 17, 'ascii');                       // 26..43  ShortName[18]
+  buf.write('lightviz Art-Net bridge', 44, 63, 'ascii');        // 44..107 LongName[64]
+  buf.write('#0001 [0000] lightviz OK', 108, 63, 'ascii');      // 108..171 NodeReport[64]
+
+  buf[172] = 0x00; buf[173] = 0x01;           // 172..173 NumPorts = 1
+  buf[174] = 0x80;                            // 174 PortTypes[0]: DMX output port
+  buf[182] = 0x80;                            // 182 GoodOutput[0]: data transmitting
+  buf[190] = 0x00;                            // 190 SwOut[0]: universe 0 (low nibble)
+  buf[200] = 0x00;                            // 200 Style = StNode
+  buf[207] = ip[0]; buf[208] = ip[1]; buf[209] = ip[2]; buf[210] = ip[3]; // BindIp
+  buf[211] = 0x01;                            // 211 BindIndex
+  buf[212] = 0x08;                            // 212 Status2: supports 15-bit addressing
+  return buf;
+}
+
+let pollReplyCount = 0;
+function replyToPoll(rinfo) {
+  const reply = buildPollReply();
+  // Reply straight back to the polling controller on the Art-Net port. (Spec
+  // allows broadcast; unicast to the sender is enough for Soundswitch.)
+  sock.send(reply, ARTNET_PORT, rinfo.address, (err) => {
+    if (err) console.warn('[artnet] ArtPollReply send failed', err.message);
+  });
+  if (pollReplyCount++ === 0) {
+    console.log(`[artnet] ArtPoll from ${rinfo.address}:${rinfo.port} → replied (advertising universe 0 output)`);
+  }
+}
+
 // Packet rate counters — printed once a second so you can confirm the
 // stream is healthy without spamming on every packet.
 const packetCounts = {};        // universe -> packets/sec
 const packetSources = {};       // universe -> last seen source ip:port
 
-sock.on('message', (msg, rinfo) => {
+function onArtNetMessage(msg, rinfo) {
   if (msg.length < 18) return;
   if (!msg.subarray(0, 8).equals(ARTNET_HEADER)) return;
 
   const opcode = msg.readUInt16LE(8);
+  if (opcode === OP_POLL) { replyToPoll(rinfo); return; }
   if (opcode !== OP_DMX) return;
 
   const universe = msg.readUInt16LE(14);
@@ -70,7 +140,9 @@ sock.on('message', (msg, rinfo) => {
       `[artnet] first packet on universe ${universe} (net=${(universe >> 8) & 0x7f} sub=${(universe >> 4) & 0xf} uni=${universe & 0xf}) from ${rinfo.address}:${rinfo.port}, ${slots} slots`
     );
   }
-});
+}
+
+sock.on('message', onArtNetMessage);
 
 // Per-second packet-rate summary. Useful when verifying the stream is
 // actually arriving (a typical Soundswitch output is 30-44 packets/sec
@@ -87,6 +159,26 @@ setInterval(() => {
 
 sock.bind(ARTNET_PORT, '0.0.0.0', () => {
   console.log(`[artnet] listening on 0.0.0.0:${ARTNET_PORT} (UDP)`);
+});
+
+// ─── Dedicated loopback socket (Windows same-machine Soundswitch) ────────────
+//
+// When Soundswitch runs on the SAME machine as this bridge and "Localhost
+// Art-Net Node" is enabled, it emits DMX to 127.0.0.1:6454. Soundswitch is
+// itself bound to 0.0.0.0:6454, so that loopback unicast can be delivered to
+// *its* socket instead of ours (Windows shared-port "last binder wins" for
+// unicast). Binding a second socket to the specific 127.0.0.1 address wins the
+// loopback delivery by longest-prefix match, making same-box capture reliable.
+// On Linux/macOS this simply also receives loopback traffic; harmless either way.
+const loopSock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+loopSock.on('error', (err) => {
+  // Non-fatal: if the OS won't allow the extra bind, the 0.0.0.0 socket above
+  // still handles everything (and on non-Windows it usually isn't needed).
+  console.warn('[artnet] loopback socket unavailable (non-fatal):', err.message);
+});
+loopSock.on('message', onArtNetMessage);
+loopSock.bind(ARTNET_PORT, '127.0.0.1', () => {
+  console.log(`[artnet] also listening on 127.0.0.1:${ARTNET_PORT} (same-machine Soundswitch)`);
 });
 
 // ─── WebSocket broadcast ────────────────────────────────────────────────────
