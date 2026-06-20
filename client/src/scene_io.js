@@ -8,7 +8,7 @@
 
 const VERSION = 2;
 
-export function serializeScene({ fixtures, extraModels = [], getActiveSceneId, stageLights, scene, renderer, camera, controls, activeSceneModel }) {
+export function serializeScene({ fixtures, extraModels = [], getActiveSceneId, stageLights, scene, renderer, camera, controls, activeSceneModel, bloomPass, getFixtureTypePower }) {
   return {
     version: VERSION,
     savedAt: new Date().toISOString(),
@@ -39,9 +39,14 @@ export function serializeScene({ fixtures, extraModels = [], getActiveSceneId, s
       ambientColor:     '#' + stageLights.ambient.color.getHexString(),
       keyIntensity:     stageLights.key.intensity,
       keyColor:         '#' + stageLights.key.color.getHexString(),
-      background:       '#' + scene.background.getHexString(),
+      envIntensity:     scene.environmentIntensity,
+      // The backdrop is a gradient texture now; fog.color tracks its base
+      // colour, so that's our serialized "background" value.
+      background:       '#' + scene.fog.color.getHexString(),
       fogDensity:       scene.fog.density,
       exposure:         renderer.toneMappingExposure,
+      bloomStrength:    bloomPass ? bloomPass.strength : undefined,
+      fixturePower:     getFixtureTypePower ? getFixtureTypePower() : undefined,
     },
     camera: {
       position: [camera.position.x, camera.position.y, camera.position.z],
@@ -117,9 +122,19 @@ export async function applyScene(data, ctx) {
     if (L.ambientColor) ctx.stageLights.ambient.color.set(L.ambientColor);
     if (typeof L.keyIntensity === 'number') ctx.stageLights.key.intensity = L.keyIntensity;
     if (L.keyColor) ctx.stageLights.key.color.set(L.keyColor);
-    if (L.background) { ctx.scene.background.set(L.background); ctx.scene.fog.color.set(L.background); }
+    if (typeof L.envIntensity === 'number') ctx.scene.environmentIntensity = L.envIntensity;
+    if (L.background) {
+      if (ctx.setBackdrop) ctx.setBackdrop(L.background);
+      else ctx.scene.fog.color.set(L.background);
+    }
     if (typeof L.fogDensity === 'number') ctx.scene.fog.density = L.fogDensity;
     if (typeof L.exposure === 'number') ctx.renderer.toneMappingExposure = L.exposure;
+    if (typeof L.bloomStrength === 'number' && ctx.bloomPass) ctx.bloomPass.strength = L.bloomStrength;
+    if (L.fixturePower && ctx.setFixtureTypePower) {
+      for (const t of ['par', 'bar', 'wedge']) {
+        if (typeof L.fixturePower[t] === 'number') ctx.setFixtureTypePower(t, L.fixturePower[t]);
+      }
+    }
   }
 
   if (data.camera) {

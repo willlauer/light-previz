@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { createStage } from './stage.js';
-import { createFixture, updateFixture, setBarOrientation, setFixtureYaw } from './fixtures.js';
+import { createFixture, updateFixture, setBarOrientation, setFixtureYaw,
+         setFixtureTypePower, getFixtureTypePower } from './fixtures.js';
 import { connectDmx, resolveDmx, sendDmxMessage } from './dmx.js';
 import { setupDragging } from './dragging.js';
 import { createOutliner } from './outliner.js';
@@ -10,18 +16,49 @@ import { serializeScene, applyScene, downloadJson, pickJsonFile, showSaveDialog,
 import { pickFixture } from './fixture_picker.js';
 import { pickGroupParams } from './fixture_group.js';
 import { pickModel, pickScene, loadModel } from './model_loader.js';
+import { createHighlighter } from './highlighter.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Scene setup
 // ───────────────────────────────────────────────────────────────────────────
 const app = document.getElementById('app');
 const scene = new THREE.Scene();
-// Slightly-blue dark grey — not pitch black, so distant grid lines stay
-// readable instead of melting into the void.
-scene.background = new THREE.Color(0x1a1f2a);
 // Lighter fog so the grid stays visible. The haze slider in the UI lets
 // you crank density back up when you want thick beams.
 scene.fog = new THREE.FogExp2(0x1a1f2a, 0.012);
+
+// Vertical gradient backdrop — darker at the top, with a faint glow toward
+// the horizon — instead of a flat fill. Reads as depth/atmosphere and gives
+// the fog something to blend into. Built as a stretched 2D gradient texture
+// (UV-mapped, so it stays fixed to the viewport rather than wrapping the
+// world). `setBackdrop(hex)` regenerates it from a base colour and keeps the
+// fog tint in lockstep, so the single "room bg" control drives both.
+let backdropTexture = null;
+function makeGradientTexture(baseHex) {
+  const base = new THREE.Color(baseHex);
+  const top = base.clone().multiplyScalar(0.35);     // dimmer ceiling
+  const horizon = base.clone().multiplyScalar(1.35); // faint glow low down
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.0, '#' + top.getHexString());
+  g.addColorStop(0.78, '#' + base.getHexString());
+  g.addColorStop(1.0, '#' + horizon.getHexString());
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 256);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+function setBackdrop(baseHex) {
+  backdropTexture?.dispose();
+  backdropTexture = makeGradientTexture(baseHex);
+  scene.background = backdropTexture;
+  scene.fog.color.set(baseHex);
+}
+setBackdrop(0x1a1f2a);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(0, 4, 11);
@@ -34,6 +71,34 @@ renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 app.appendChild(renderer.domElement);
 
+// Neutral image-based lighting so PBR (glTF) materials read correctly:
+// metals/chrome reflect something instead of rendering black, and glass
+// picks up subtle highlights. RoomEnvironment is a procedural studio cube,
+// so there's no external HDR to ship. Only affects Standard/Physical
+// materials (glTF + the default stage); legacy OBJ Phong materials ignore it.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// ───────────────────────────────────────────────────────────────────────────
+// Post-processing — bloom
+// ───────────────────────────────────────────────────────────────────────────
+// The fixture LEDs and beams are emissive + `toneMapped:false`, so they sit
+// bright in the HDR buffer. UnrealBloomPass blooms only what's above its
+// threshold, so the lights glow and bleed while the (darker) room geometry
+// stays crisp. RenderPass renders the scene linearly into the composer target;
+// OutputPass applies tone mapping (ACES) + sRGB at the very end — so tone
+// mapping happens once, after bloom, and the exposure slider still works.
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.8,    // strength — user-adjustable via the "bloom" slider
+  0.6,    // radius
+  0.6,    // threshold (HDR luminance below this doesn't bloom)
+);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -45,6 +110,8 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  bloomPass.resolution.set(window.innerWidth, window.innerHeight);
 });
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -76,9 +143,17 @@ bindRange('amb-int', 'amb-int-v', (n) => n.toFixed(2), (n) => { stageLights.ambi
 bindColor('amb-col', (hex) => { stageLights.ambient.color.set(hex); });
 bindRange('key-int', 'key-int-v', (n) => n.toFixed(2), (n) => { stageLights.key.intensity = n; });
 bindColor('key-col', (hex) => { stageLights.key.color.set(hex); });
-bindColor('bg-col',  (hex) => { scene.background.set(hex); scene.fog.color.set(hex); });
+// Image-based ambient from RoomEnvironment. Scaling this down darkens all
+// PBR/glTF materials uniformly so fixture beams + LEDs stand out — the one
+// brightness source the ambient/key sliders can't reach.
+bindRange('env-int', 'env-int-v', (n) => n.toFixed(2), (n) => { scene.environmentIntensity = n; });
+bindColor('bg-col',  (hex) => { setBackdrop(hex); });
 bindRange('fog',     'fog-v',     (n) => n.toFixed(3), (n) => { scene.fog.density = n; });
 bindRange('exp',     'exp-v',     (n) => n.toFixed(2), (n) => { renderer.toneMappingExposure = n; });
+bindRange('bloom',   'bloom-v',   (n) => n.toFixed(2), (n) => { bloomPass.strength = n; });
+bindRange('pow-par',   'pow-par-v',   (n) => n.toFixed(2), (n) => { setFixtureTypePower('par', n); });
+bindRange('pow-bar',   'pow-bar-v',   (n) => n.toFixed(2), (n) => { setFixtureTypePower('bar', n); });
+bindRange('pow-wedge', 'pow-wedge-v', (n) => n.toFixed(2), (n) => { setFixtureTypePower('wedge', n); });
 
 // ───────────────────────────────────────────────────────────────────────────
 // HUD elements
@@ -154,6 +229,7 @@ function addFixture(def) {
   fixtures.push(fixture);
   fixtureCountEl.textContent = String(fixtures.length);
   outliner?.refresh();
+  highlighter?.refresh();
   sendPatchToServer();
   markDirty();
   // If this fixture's xz matches a truss slot, hide that slot's marker
@@ -195,6 +271,7 @@ function removeFixture(fixture) {
     outliner?.setSelection(null);
   }
   outliner?.refresh();
+  highlighter?.refresh();
   sendPatchToServer();
   markDirty();
 }
@@ -337,6 +414,34 @@ function getPlacementTargets() {
   }
   for (const m of extraModels) targets.push(m.group);
   return targets;
+}
+
+// Surface-follow for dragging in an imported model scene. The default stage
+// uses its hand-authored walkable obstacles for height; a model has none, so
+// instead we raycast straight down onto the scene geometry to find the
+// surface the fixture should rest on (club floor, a platform, a stair tread).
+//
+// The ray starts only SURFACE_LIFT above the fixture's current height so it
+// catches the surface right beneath it and can step up onto low platforms,
+// while never reaching the ceiling/roof far overhead. Returns the surface Y,
+// or null when there's no scene geometry below (e.g. dragged past the model
+// edge) so the caller can leave the height unchanged.
+const _surfaceRay = new THREE.Raycaster();
+const _surfaceDown = new THREE.Vector3(0, -1, 0);
+const _surfaceOrigin = new THREE.Vector3();
+const SURFACE_LIFT = 1.0;
+function sceneSurfaceY(x, z, currentY = 0) {
+  if (activeSceneType === 'default') return null;   // default stage handles its own height
+  const targets = getPlacementTargets();
+  if (targets.length === 0) return null;
+  _surfaceOrigin.set(x, currentY + SURFACE_LIFT, z);
+  _surfaceRay.set(_surfaceOrigin, _surfaceDown);
+  const hits = _surfaceRay.intersectObjects(targets, true);
+  for (const h of hits) {
+    if (h.object.userData?.isSlotMarker) continue;
+    return h.point.y;
+  }
+  return currentY;   // model scene but nothing below → keep current height, don't drop to 0
 }
 
 async function doAddFloor() {
@@ -504,6 +609,7 @@ async function doAddModel() {
   group.position.set(0, 0, 0);
   scene.add(group);
   extraModels.push({ id: choice.id, group });
+  highlighter?.refresh();
   markDirty();
 }
 
@@ -518,6 +624,7 @@ function removeExtraModel(model) {
     else obj.material?.dispose?.();
   });
   if (selectedModel === model) handleSelectModel(null);
+  highlighter?.refresh();
   markDirty();
 }
 
@@ -566,6 +673,7 @@ function handleSelect(fixture) {
     selected = fixture;
   }
   outliner?.setSelection(selected);
+  highlighter?.setSelection(selected);
 }
 
 // Selected extra model (independent of fixture selection). Highlighted with a
@@ -591,6 +699,24 @@ function handleSelectModel(model) {
   } else {
     modelSelectionBox.visible = false;
   }
+  highlighter?.setSelection(selectedModel);
+}
+
+// X-ray highlighter — toggleable always-on-top markers over every fixture and
+// extra model, so obscured objects stay visible and clickable. `fixtures` and
+// `extraModels` are the live arrays it re-reads on every refresh().
+const highlighter = createHighlighter({ scene, fixtures, models: extraModels });
+
+function toggleHighlight() {
+  const on = highlighter.toggle();
+  // Seed the overlay with the current selection so its marker is emphasised.
+  highlighter.setSelection(selected || selectedModel);
+  setHighlightUi(on);
+}
+
+function setHighlightUi(on) {
+  const check = document.getElementById('view-highlight-check');
+  if (check) check.textContent = on ? '✓ ' : '';
 }
 
 // Snapshot of the scene state captured right after initial build, used by
@@ -612,9 +738,15 @@ function refreshLightingUi() {
   document.getElementById('amb-col').value = '#' + stageLights.ambient.color.getHexString();
   set('key-int', stageLights.key.intensity, (n) => n.toFixed(2));
   document.getElementById('key-col').value = '#' + stageLights.key.color.getHexString();
-  document.getElementById('bg-col').value = '#' + scene.background.getHexString();
+  set('env-int', scene.environmentIntensity ?? 1, (n) => n.toFixed(2));
+  document.getElementById('bg-col').value = '#' + scene.fog.color.getHexString();
   set('fog', scene.fog.density, (n) => n.toFixed(3));
   set('exp', renderer.toneMappingExposure, (n) => n.toFixed(2));
+  set('bloom', bloomPass.strength, (n) => n.toFixed(2));
+  const power = getFixtureTypePower();
+  set('pow-par', power.par, (n) => n.toFixed(2));
+  set('pow-bar', power.bar, (n) => n.toFixed(2));
+  set('pow-wedge', power.wedge, (n) => n.toFixed(2));
 }
 
 loadPatchAndBuild()
@@ -625,8 +757,10 @@ loadPatchAndBuild()
     dragging = setupDragging({
       renderer, camera, controls, fixtures,
       obstacles: dragObstacles,                 // mutated in place by setScene
+      getSurfaceY: sceneSurfaceY,               // height-follow for model scenes
       slots:     stageLights.trussSlots || [],
       models:    extraModels,                   // mutated in place by doAddModel
+      highlighter,                              // X-ray markers get pick priority
       onSelect:  handleSelect,
       onSlotClick: handleSlotClick,
       onSelectModel: handleSelectModel,
@@ -719,6 +853,7 @@ function removeAllExtraModels() {
     });
   }
   extraModels.length = 0;
+  highlighter?.refresh();
 }
 
 // Re-import an extra model by id and apply its transform.
@@ -738,6 +873,7 @@ async function reAddExtraModelById(id, transform) {
   }
   scene.add(group);
   extraModels.push({ id, group });
+  highlighter?.refresh();
   return group;
 }
 
@@ -757,6 +893,8 @@ async function applySceneChoice(choice) {
 
 const sceneCtx = () => ({
   fixtures, stageLights, scene, renderer, camera, controls,
+  bloomPass, setBackdrop,
+  getFixtureTypePower, setFixtureTypePower,
   addFixture, removeFixture, loadProfile,
   setBarOrientation, setFixtureYaw, refreshLightingUi,
   extraModels, removeAllExtraModels, reAddExtraModelById,
@@ -778,14 +916,19 @@ async function doNew() {
 let currentFileHandle = null;
 let lastSaveName = 'lightviz-scene';
 
-async function doSave() {
+// `saveAs` forces picking a new file even when the scene is already bound to
+// one — used by File > Save As. Plain Save overwrites the bound file in place
+// once one exists.
+async function doSave({ saveAs = false } = {}) {
   const data = serializeScene(sceneCtx());
   if (supportsFsAccess()) {
     try {
-      // First save (or after New) picks a location; later saves overwrite it.
-      if (!currentFileHandle) {
-        currentFileHandle = await pickSaveFileHandle({ suggestedName: lastSaveName + '.json' });
-        if (!currentFileHandle) return;   // user cancelled
+      // Save As always prompts; plain Save only prompts on the first save
+      // (or after New), then overwrites the bound file.
+      if (saveAs || !currentFileHandle) {
+        const handle = await pickSaveFileHandle({ suggestedName: lastSaveName + '.json' });
+        if (!handle) return;              // user cancelled — keep the old binding
+        currentFileHandle = handle;
       }
       await writeJsonToHandle(currentFileHandle, data);
       lastSaveName = (currentFileHandle.name || lastSaveName).replace(/\.json$/i, '');
@@ -796,7 +939,8 @@ async function doSave() {
     }
     return;
   }
-  // Fallback (Firefox/Safari): no in-place overwrite — download a new file.
+  // Fallback (Firefox/Safari): no in-place overwrite — always download a new
+  // file, so Save and Save As behave identically here.
   const name = await showSaveDialog({ defaultName: lastSaveName });
   if (!name) return;
   lastSaveName = name.replace(/\.json$/i, '');
@@ -833,6 +977,7 @@ for (const btn of fileMenu.querySelectorAll('.dropdown button[data-action]')) {
     const action = btn.dataset.action;
     if (action === 'new') doNew();
     else if (action === 'save') doSave();
+    else if (action === 'save-as') doSave({ saveAs: true });
     else if (action === 'open') doOpen();
     else if (action === 'set-scene') doPickScene();
   });
@@ -860,6 +1005,24 @@ for (const btn of addMenu.querySelectorAll('.dropdown button[data-action]')) {
   });
 }
 
+// ─── View menu ───────────────────────────────────────────────────────────
+const viewMenu = document.getElementById('menu-view');
+viewMenu.querySelector('.menu-button').addEventListener('click', (e) => {
+  e.stopPropagation();
+  for (const m of document.querySelectorAll('#menubar .menu')) {
+    if (m !== viewMenu) m.classList.remove('open');
+  }
+  viewMenu.classList.toggle('open');
+});
+document.addEventListener('click', () => viewMenu.classList.remove('open'));
+for (const btn of viewMenu.querySelectorAll('.dropdown button[data-action]')) {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    viewMenu.classList.remove('open');
+    if (btn.dataset.action === 'toggle-highlight') toggleHighlight();
+  });
+}
+
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────
 // Delete / Backspace: remove the currently-selected fixture (unless a text
 // input is focused). 'a': open Add Floor Fixture.
@@ -876,6 +1039,9 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'a' && !e.metaKey && !e.ctrlKey) {
     e.preventDefault();
     doAddFloor();
+  } else if (e.key === 'h' && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    toggleHighlight();
   } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && selected) {
     e.preventDefault();
     copyFixture(selected);
@@ -1108,7 +1274,7 @@ async function addFixtureAt(worldPoint) {
 window.addEventListener('keydown', (e) => {
   if (!(e.metaKey || e.ctrlKey)) return;
   const k = e.key.toLowerCase();
-  if (k === 's') { e.preventDefault(); doSave(); }
+  if (k === 's') { e.preventDefault(); doSave({ saveAs: e.shiftKey }); }
   else if (k === 'o') { e.preventDefault(); doOpen(); }
 });
 
@@ -1197,8 +1363,11 @@ function tick() {
   // Keep the model highlight box glued to the selected model as it's dragged.
   if (selectedModel) modelSelectionBox.update();
 
+  // Keep X-ray markers glued to their objects (no-op when the overlay is off).
+  highlighter.update();
+
   controls.update();
-  renderer.render(scene, camera);
+  composer.render();
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);

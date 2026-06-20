@@ -374,6 +374,7 @@
           <button data-action="new">New Scene</button>
           <button data-action="open">Open…<span class="shortcut">⌘O</span></button>
           <button data-action="save">Save…<span class="shortcut">⌘S</span></button>
+          <button data-action="save-as">Save As…<span class="shortcut">⇧⌘S</span></button>
           <div class="sep"></div>
           <button data-action="set-scene">Set Scene…</button>
         </div>
@@ -386,6 +387,12 @@
           <button data-action="add-group">Fixture Group…</button>
           <div class="sep"></div>
           <button data-action="add-model">Model…</button>
+        </div>
+      </div>
+      <div class="menu" id="menu-view">
+        <button class="menu-button" data-menu="view">View</button>
+        <div class="dropdown">
+          <button data-action="toggle-highlight"><span id="view-highlight-check"></span>Highlight All Objects<span class="shortcut">H</span></button>
         </div>
       </div>
       <div id="dirty-indicator" title="You have unsaved changes">
@@ -466,7 +473,7 @@
       <div>fixtures: <span id="fixture-count">0</span></div>
       <div>fps: <span id="fps">0</span></div>
     </div>
-    <div id="help">orbit = left-drag empty space · zoom = wheel · pan = right-drag · move fixture = grab a floor-mounted one</div>
+    <div id="help">orbit = left-drag empty space · zoom = wheel · pan = right-drag · move fixture = grab a floor-mounted one · H = highlight/select all (X-ray)</div>
     <div id="outliner" class="collapsed">
       <button class="tab" id="outliner-tab" title="Show fixtures">Fixtures</button>
       <div class="body">
@@ -499,6 +506,11 @@
         <input id="key-col" type="color" value="#eaf0ff">
         <span class="val"></span>
       </div>
+      <div class="row">
+        <label for="env-int" title="Image-based ambient from the studio environment. Turn this down to darken the scene so fixture beams read.">env</label>
+        <input id="env-int" type="range" min="0" max="2" step="0.01" value="1">
+        <span class="val" id="env-int-v">1.00</span>
+      </div>
       <hr>
       <div class="row">
         <label for="bg-col">room bg</label>
@@ -514,6 +526,28 @@
         <label for="exp">exposure</label>
         <input id="exp" type="range" min="0.2" max="2.0" step="0.01" value="1.0">
         <span class="val" id="exp-v">1.00</span>
+      </div>
+      <div class="row">
+        <label for="bloom" title="Glow bleed from the bright fixture LEDs and beams.">bloom</label>
+        <input id="bloom" type="range" min="0" max="2.5" step="0.01" value="0.8">
+        <span class="val" id="bloom-v">0.80</span>
+      </div>
+      <hr>
+      <h3>fixture power</h3>
+      <div class="row">
+        <label for="pow-par" title="Master brightness for all par / wash fixtures.">pars</label>
+        <input id="pow-par" type="range" min="0" max="3" step="0.05" value="1">
+        <span class="val" id="pow-par-v">1.00</span>
+      </div>
+      <div class="row">
+        <label for="pow-bar" title="Master brightness for all pixel-bar fixtures.">bars</label>
+        <input id="pow-bar" type="range" min="0" max="6" step="0.05" value="1">
+        <span class="val" id="pow-bar-v">1.00</span>
+      </div>
+      <div class="row">
+        <label for="pow-wedge" title="Master brightness for all wedge / uplight fixtures.">wedges</label>
+        <input id="pow-wedge" type="range" min="0" max="4.5" step="0.05" value="1">
+        <span class="val" id="pow-wedge-v">1.00</span>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>

@@ -1,7 +1,29 @@
 import * as THREE from 'three';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 import { createBeam, setBeam } from './beam.js';
 
 const tmpColor = new THREE.Color();
+
+// Per-type "power" multiplier — a master brightness scale applied to every
+// fixture of a given type (its LED emissive, beams, and cast light all scale
+// together). 1.0 = the tuned default. Driven by the "fixture power" sliders so
+// pars / bars / wedges can be balanced against each other in a given rig.
+const typePower = { par: 1, bar: 1, wedge: 1 };
+export function setFixtureTypePower(type, value) {
+  if (type in typePower) typePower[type] = value;
+}
+export function getFixtureTypePower() {
+  return { ...typePower };
+}
+
+// RectAreaLight needs its LTC lookup textures initialised once before any are
+// rendered. Lazy + guarded so it costs nothing until the first bar is built.
+let rectUniformsReady = false;
+function ensureRectUniforms() {
+  if (rectUniformsReady) return;
+  RectAreaLightUniformsLib.init();
+  rectUniformsReady = true;
+}
 
 // ─── Public API ────────────────────────────────────────────────────────────
 //
@@ -341,20 +363,24 @@ function buildBar(root, aim, entry, profile, mount, pos, mountY) {
   // Rotation is applied by applyBarOrientation() once the fixture object is
   // assembled, so we can also handle horizontal/vertical switching cleanly.
 
-  // PointLights spread along the bar
-  const lightCount = Math.min(4, segments);
-  const segLights = [];
-  for (let i = 0; i < lightCount; i++) {
-    const frac = (i + 0.5) / lightCount;
-    const pl = new THREE.PointLight(0xffffff, 0, 8, 2);
-    pl.position.set(-length / 2 + length * frac, -0.1, 0.05);
-    aim.add(pl);
-    segLights.push({
-      light: pl,
-      segStart: Math.floor(segments * i / lightCount),
-      segEnd: Math.floor(segments * (i + 1) / lightCount),
-    });
-  }
+  // One directional area light spanning the whole bar. A real LED bar throws
+  // light OUT of its lit face — forward, in a soft even sheet — not in all
+  // directions (the old PointLights washed everything around the fixture).
+  // A SINGLE full-length RectAreaLight reads as one smooth wash; multiple
+  // smaller ones each produced their own near-field hotspot and looked
+  // blotchy. It emits along its local -Z, but the LED segments face +Z, so we
+  // rotate 180° around Y to point the emission out the front; the aim group
+  // then carries yaw / vertical orientation on top. RectAreaLight only lights
+  // Standard/Physical materials (the stage + glTF models).
+  ensureRectUniforms();
+  const rect = new THREE.RectAreaLight(0xffffff, 0, length * 0.95, 0.14);
+  // Just in front of the lit face so the emitter isn't buried in the body.
+  rect.position.set(0, 0, 0.06);
+  rect.rotation.y = Math.PI;
+  aim.add(rect);
+  // The update loop still works per-group; with one light the group spans all
+  // segments, so the wash takes on the bar's average colour.
+  const segLights = [{ light: rect, segStart: 0, segEnd: segments }];
 
   const fixture = {
     group: root, patch: entry, profile,
@@ -471,7 +497,7 @@ function updatePar(fixture, params, timeSec) {
     const hz = THREE.MathUtils.mapLinear(strobe, 10, 255, 1, 20);
     gate = (Math.sin(timeSec * hz * Math.PI * 2) > 0) ? 1 : 0;
   }
-  const intensity = dimmer * gate;
+  const intensity = dimmer * gate * typePower.par;
 
   const cr = Math.min(r, 1.5);
   const cg = Math.min(g, 1.5);
@@ -493,6 +519,17 @@ function updatePar(fixture, params, timeSec) {
   fixture.spot.intensity = intensity * 25;
 }
 
+// Bar RectAreaLight intensity multiplier (physical units). Tuned for the
+// single full-length emitter — a soft wash rather than a blown hotspot.
+// Reach grows with the square root of intensity, so this 24→35 bump pushes
+// the pool ~20% further out.
+const BAR_LIGHT_INTENSITY = 35;
+
+// Emissive over-drive for the bar's own LED segments. They're MeshBasic +
+// toneMapped:false, so pushing colour past 1.0 makes the pixels read bright
+// and bloom hard — matching how the par/wedge LEDs over-drive (up to ~1.5).
+const BAR_SEGMENT_BOOST = 3.6;
+
 function updateBar(fixture, params, timeSec) {
   const dimmer = (params.dimmer ?? 255) / 255;
   const segments = fixture.segMeshes;
@@ -503,13 +540,13 @@ function updateBar(fixture, params, timeSec) {
     const hz = THREE.MathUtils.mapLinear(strobe, 10, 255, 1, 20);
     gate = (Math.sin(timeSec * hz * Math.PI * 2) > 0) ? 1 : 0;
   }
-  const masterIntensity = dimmer * gate;
+  const masterIntensity = dimmer * gate * typePower.bar;
 
   if (params.segments && params.segments.length) {
     for (let i = 0; i < segments.length; i++) {
       const s = params.segments[i] || { r: 0, g: 0, b: 0, dimmer: 255 };
       const segDim = (s.dimmer ?? 255) / 255;
-      const k = masterIntensity * segDim;
+      const k = masterIntensity * segDim * BAR_SEGMENT_BOOST;
       segments[i].material.color.setRGB(
         (s.r / 255) * k,
         (s.g / 255) * k,
@@ -517,9 +554,10 @@ function updateBar(fixture, params, timeSec) {
       );
     }
   } else {
-    const r = (params.red   ?? 0) / 255 * masterIntensity;
-    const g = (params.green ?? 0) / 255 * masterIntensity;
-    const b = (params.blue  ?? 0) / 255 * masterIntensity;
+    const k = masterIntensity * BAR_SEGMENT_BOOST;
+    const r = (params.red   ?? 0) / 255 * k;
+    const g = (params.green ?? 0) / 255 * k;
+    const b = (params.blue  ?? 0) / 255 * k;
     for (const m of segments) m.material.color.setRGB(r, g, b);
   }
 
@@ -533,7 +571,11 @@ function updateBar(fixture, params, timeSec) {
     const lum = Math.max(r, g, b);
     if (lum > 0.001) {
       light.color.setRGB(r / lum, g / lum, b / lum);
-      light.intensity = lum * 6;
+      // RectAreaLight is in physical (nit-like) units and these emitters are
+      // small, so it wants a much higher number than the old PointLight did.
+      // Divide out the segment over-drive so the thrown light tracks the real
+      // DMX level (0..1) and stays independent of the emissive pop boost.
+      light.intensity = (lum / BAR_SEGMENT_BOOST) * BAR_LIGHT_INTENSITY;
     } else {
       light.intensity = 0;
     }
@@ -562,7 +604,7 @@ function updateWedge(fixture, params, timeSec) {
     const hz = THREE.MathUtils.mapLinear(strobe, 10, 255, 1, 20);
     gate = (Math.sin(timeSec * hz * Math.PI * 2) > 0) ? 1 : 0;
   }
-  const intensity = dimmer * gate;
+  const intensity = dimmer * gate * typePower.wedge;
 
   const cr = Math.min(r, 1.5);
   const cg = Math.min(g, 1.5);

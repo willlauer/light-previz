@@ -29,11 +29,14 @@ export function createStage(scene) {
   key.position.set(4, 8, 6);
   scene.add(key);
 
-  // Floor — light grey so the grid reads against it. The plane is huge
-  // already; we still scale it so it's never smaller than the walls.
+  // Floor — darker + glossy so it reads like a polished club floor: the
+  // fixture spotlights and the key light leave bright specular glints, and the
+  // environment reflection gives it a wet sheen. Low roughness + some
+  // metalness is what sells the reflectivity (true mirror reflections would
+  // need a Reflector, but this is the cheap convincing version).
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(S(60), S(60)),
-    new THREE.MeshStandardMaterial({ color: 0x3a4050, roughness: 0.85, metalness: 0.05 })
+    new THREE.MeshStandardMaterial({ color: 0x23272f, roughness: 0.28, metalness: 0.45 })
   );
   floor.rotation.x = -Math.PI / 2;
   stageGroup.add(floor);

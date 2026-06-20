@@ -157,7 +157,7 @@ function resolveCollisions(active, fixtures, obstacles, x, z) {
 // for the gesture to count as a drag rather than a click.
 const CLICK_THRESHOLD_PX = 5;
 
-export function setupDragging({ renderer, camera, controls, fixtures, obstacles = [], slots = [], models = [], onSelect, onSlotClick, onSelectModel, onChange }) {
+export function setupDragging({ renderer, camera, controls, fixtures, obstacles = [], getSurfaceY = null, slots = [], models = [], highlighter = null, onSelect, onSlotClick, onSelectModel, onChange }) {
   const dom = renderer.domElement;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -195,6 +195,15 @@ export function setupDragging({ renderer, camera, controls, fixtures, obstacles 
   // pick target), and both take priority over slots.
   function pick() {
     raycaster.setFromCamera(pointer, camera);
+    // X-ray overlay: while it's on, its always-on-top markers take priority so
+    // even an object hidden behind geometry can be hovered/clicked/selected.
+    if (highlighter?.enabled) {
+      const markers = highlighter.markers;
+      if (markers.length > 0) {
+        const hits = raycaster.intersectObjects(markers, false);
+        if (hits.length > 0) return hits[0].object.userData.pickTarget;
+      }
+    }
     if (fixtures.length > 0) {
       const roots = fixtures.map((f) => f.group);
       const hits = raycaster.intersectObjects(roots, true);
@@ -315,7 +324,16 @@ export function setupDragging({ renderer, camera, controls, fixtures, obstacles 
         const propZ = intersection.z - offset.z;
         if (candidate.kind === 'fixture') {
           const resolved = resolveCollisions(candidate.fixture, fixtures, obstacles, propX, propZ);
-          group.position.set(resolved.x, resolved.y, resolved.z);
+          // In a model scene there are no walkable obstacles, so resolved.y is
+          // 0 — raycast the scene to rest the fixture on the surface beneath
+          // it (floor/platform). getSurfaceY returns null when it doesn't apply
+          // (default stage), in which case resolved.y stands.
+          let y = resolved.y;
+          if (getSurfaceY) {
+            const sy = getSurfaceY(resolved.x, resolved.z, group.position.y);
+            if (sy != null) y = sy;
+          }
+          group.position.set(resolved.x, y, resolved.z);
         } else {
           // Models move freely on XZ — they have arbitrary footprints, so we
           // don't run them through the fixture OBB collision solver. Y stays

@@ -210,26 +210,37 @@ const httpServer = http.createServer((req, res) => {
   // Discover any directory at the project root that contains a .obj file,
   // and expose its contents over HTTP.
   if (req.url === '/models') {
-    const dirs = [];
+    const models = [];
+    const SKIP = new Set(['node_modules', 'client', 'server', 'profiles']);
     for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      if (entry.name.startsWith('.') || entry.name === 'node_modules' ||
-          entry.name === 'client' || entry.name === 'server' ||
-          entry.name === 'profiles') continue;
+      if (entry.name.startsWith('.')) continue;
+
+      // Root-level .glb/.gltf — a glTF binary is self-contained, so it can sit
+      // loose at the project root without its own folder. `root: true` tells
+      // the client to load it directly from /models/<file>.
+      if (entry.isFile()) {
+        if (/\.(glb|gltf)$/i.test(entry.name)) {
+          models.push({ id: entry.name, name: entry.name, gltf: entry.name, root: true });
+        }
+        continue;
+      }
+
+      if (!entry.isDirectory() || SKIP.has(entry.name)) continue;
       const dirPath = path.join(ROOT, entry.name);
       const files = fs.readdirSync(dirPath);
-      const obj = files.find((f) => f.toLowerCase().endsWith('.obj'));
-      if (!obj) continue;
-      const mtl = files.find((f) => f.toLowerCase().endsWith('.mtl'));
-      dirs.push({
-        id:    entry.name,
-        name:  entry.name,
-        obj,   // filename within the directory
-        mtl,   // may be undefined
+      // Prefer glTF (preserves PBR materials) over OBJ when both are present.
+      const gltf = files.find((f) => /\.(glb|gltf)$/i.test(f));
+      const obj  = files.find((f) => f.toLowerCase().endsWith('.obj'));
+      if (!gltf && !obj) continue;
+      const mtl  = files.find((f) => f.toLowerCase().endsWith('.mtl'));
+      models.push({
+        id:   entry.name,
+        name: entry.name,
+        ...(gltf ? { gltf } : { obj, mtl }),   // mtl is meaningless for glTF
       });
     }
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(dirs));
+    res.end(JSON.stringify(models));
     return;
   }
 
@@ -252,6 +263,9 @@ const httpServer = http.createServer((req, res) => {
       '.png':  'image/png',
       '.tga':  'image/x-tga',
       '.bmp':  'image/bmp',
+      '.glb':  'model/gltf-binary',
+      '.gltf': 'model/gltf+json',
+      '.bin':  'application/octet-stream',   // glTF external buffers
     })[ext] || 'application/octet-stream';
     res.writeHead(200, { 'content-type': mime });
     fs.createReadStream(target).pipe(res);
